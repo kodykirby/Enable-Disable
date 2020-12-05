@@ -1,0 +1,47 @@
+//project enable disable pins
+volatile unsigned char* ddr_k = (unsigned char*)0x107;
+volatile unsigned char* port_k = (unsigned char*)0x108;
+volatile unsigned char* pin_k = (unsigned char*) 0x106;
+volatile unsigned char* port_f= (unsigned char*) 0x31;
+volatile unsigned char* ddr_f = (unsigned char*)0x30;
+volatile unsigned char* ddr_b = (unsigned char*)0x24;
+volatile unsigned char* port_b = (unsigned char*)0x25;
+
+void setup() {
+Serial.begin(9600);
+   *ddr_k |= 0xFD; //all but pk0,1,2 are outputs
+ *port_k |= 0x07;       // Set internal pull up 
+ *ddr_f |= 0xFF; //all are outputs 
+ *ddr_b |= 0xFF;
+ 
+ 
+
+}
+
+void loop() {
+
+ if(!(*pin_k & 0x01)){
+   
+  Serial.println("System Disable"); //Set System to low state
+   
+    *port_f |= 0x00; //shut off output port  
+    *port_b = 0x00;
+     while(!(*pin_k & 0x01));
+       *port_f |= 0x00; //shut off output port  
+    *port_b |= 0x00;
+
+  }
+
+  if(*pin_k & 0x01) {
+  
+       Serial.println("System Enable");
+    *port_f |= 0xFF; //turn on outputs 
+    *port_k |= 0xF8;
+    *port_b |=0xFF;
+   while((*pin_k & 0x01));
+ }
+
+
+  // put your main code here, to run repeatedly:
+
+}
