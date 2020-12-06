@@ -1,3 +1,13 @@
+  volatile unsigned char* my_ADMUX = (unsigned char*) 0x07C;
+  volatile unsigned char* my_ADCSRB =(unsigned char*) 0x7B;
+  volatile unsigned char* my_ADCSRA =(unsigned char*) 0x7A;
+  volatile unsigned int* my_ADC_DATA =(unsigned int*) 0x78;
+  unsigned int potpin = 0;
+  unsigned int adc_reading = 0;
+  
+  
+
+ 
 #include <Servo.h>
 Servo servo;
 
@@ -16,36 +26,40 @@ servo.write(0);
 void loop(){
   
  
-  unsigned int adc_reading = adc_read(10);
-  //adc_reading = map(adc_reading , 0, 1023, 0, 180);     // scale it to use it with the servo (value between 0 and 180)
+  adc_reading = adc_read(potpin);
+  adc_reading = map(adc_reading , 0, 1023, 0, 180);     // scale it to use it with the servo (value between 0 and 180)
   servo.write(adc_reading);   
   Serial.println(adc_reading);// sets the servo position according to the scaled value
   delay(20);
+  
  
   
   
 }
 
-
 void adc_init(){
   *my_ADCSRA |= 0x80;
-  *my_ADCSRA &= 0xDF;       //0b11010000
-   *my_ADCSRA &= 0xF7;
-    *my_ADCSRA &= 0xF8;
-    
+  *my_ADCSRA &= 0xDF; //0b11010000
+  *my_ADCSRA &= 0xF7;
+  *my_ADCSRA &= 0xF3;
+  
   *my_ADCSRB &= 0xF7;
   *my_ADCSRB &= 0xF8;
 
+ 
   *my_ADMUX &= 0x7F;
   *my_ADMUX |= 0x40;
   *my_ADMUX &= 0xDF;
   *my_ADMUX &= 0xE0;
+
+   
 }
 
-unsigned int adc_read(unsigned char adc_channel_num){
+unsigned int adc_read(unsigned int adc_channel_num){
   *my_ADMUX &= 0xE0;
-  *my_ADCSRB &= 0xF7;
+  *my_ADCSRB &= 0xFF;
   *my_ADMUX |= adc_channel_num;
+  
   
   *my_ADCSRA |= 0x40;
   
