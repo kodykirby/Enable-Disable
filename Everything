@@ -1,0 +1,183 @@
+#include <Arduino.h>
+#include <LiquidCrystal.h>
+#include <Wire.h>
+#include <dht11.h>
+#include <Servo.h>
+#include <DS1307.h>
+#include <DS3231.h>
+
+volatile unsigned char* ddr_k = (unsigned char*)0x107;
+volatile unsigned char* port_k = (unsigned char*)0x108;
+volatile unsigned char* pin_k = (unsigned char*) 0x106;
+volatile unsigned char* port_f= (unsigned char*) 0x31;
+volatile unsigned char* ddr_f = (unsigned char*)0x30;
+volatile unsigned char* ddr_b = (unsigned char*)0x24;
+volatile unsigned char* port_b = (unsigned char*)0x25;
+
+volatile unsigned char *myUCSR0A = (unsigned char *) 0x00C0;
+volatile unsigned char *myUCSR0B = (unsigned char *) 0x00C1;
+volatile unsigned char *myUCSR0C = (unsigned char *) 0x00C2;
+volatile unsigned char *myUBRR0 = (unsigned char *) 0x00C4;
+volatile unsigned char *myUDR0 = (unsigned char *) 0x00C6;
+
+volatile unsigned char *my_ADMUX = (unsigned char *) 0x7C;
+volatile unsigned char *my_ADCSRB = (unsigned char *) 0x7B;
+volatile unsigned char *my_ADCSRA = (unsigned char *) 0x7A;
+volatile unsigned char *my_ADC_DATA = (unsigned char *) 0x78;
+
+volatile unsigned char *myTCCR1A = (unsigned char *) 0x80;
+volatile unsigned char *myTCCR1B = (unsigned char *) 0x81;
+volatile unsigned char *myTCNT1 = (unsigned char *) 0x84;
+volatile unsigned char *myOCR1A = (unsigned char *) 0x88;
+volatile unsigned char *myTIMSK1 = (unsigned char *) 0x6F;
+
+unsigned int potpin = 0;
+unsigned int adc_reading = 0;
+int reading = 0;
+int test;
+const int rs = 11, en = 10, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+dht11 DHT11;
+Servo servo;
+
+#define sensorPin 1
+#define RDA 0x80
+#define DHT11PIN 6
+
+ISR(TIMER1_COMPA_vect){
+  *port_k |= 0x80; //turn on adc0
+  delay(10);
+  reading = analogRead(1);
+  if(reading < 200){ //water threshold for error
+    lcd.print("ERROR");
+    *port_f |= 0b00010000; //turns on red led to indicate err
+  }
+  if(reading > 200){
+    *port_f &= 0b11101111; //turns off red led
+    *port_f |= 0b00100000; //turns on green led
+  }
+  *port_k &= 0x7F; //turn off adc0
+}
+
+
+void setup() {
+ U0init(9600); //set up the uart
+ adc_init(); //set up the adc
+ *ddr_k |= 0xFD; //all but pk0,1,2 are outputs
+ *port_k |= 0x07; // Set internal pull up 
+ *ddr_f |= 0xFF; //all are outputs 
+ *ddr_b |= 0xFF;
+ *ddr_f &= 0xF0; //lower half of byte is inputs, upper is outputs
+ *ddr_k |= 0xFF; //port b is all outputs
+ *port_k &= 0x00; //all pins in port b are set low
+
+ //timer setup here
+  TCCR1A = 0; // clears TCCR1A register
+  TCCR1B = 0; // clears TCCR1B register
+  TCNT1  = 0; //sets counter value to 0
+ 
+  OCR1A = 15624; //sets for 1hz increments
+  TCCR1B |= 0b00001000; //turns on ctc mode
+  TCCR1B |= 0b00000101; //sets prescaler of 1024
+  TIMSK1 |= 0b00000010; //enables timer compare interrupt
+
+  //lcd setup
+  lcd.begin(16,2)
+
+  //servo setup
+  servo.attach(12);
+  servo.write(0);
+
+  //RTC setup
+  Wire.begin();
+  rtc.stop();
+  rtc.set(DS1307_SEC,1);        //set the seconds
+  rtc.set(DS1307_MIN,50);       //set the minutes
+  rtc.set(DS1307_HR,0);        //set the hours   note 24 hour clock
+  rtc.set(DS1307_DOW,5);        //set the day of the week
+  rtc.set(DS1307_DATE,14);      //set the date
+  rtc.set(DS1307_MTH,8);        //set the month
+  rtc.set(DS1307_YR,9);         //set the year   
+  rtc.start();                  //starts the real time clock
+
+  //enables interrupts
+  sei();
+}
+
+void loop() {
+  if(!(*pin_k & 0x01)){
+   Serial.println("System Disable"); //Set System to low state
+   *port_f |= 0x00; //shut off output port  
+   *port_b = 0x00;
+   while(!(*pin_k & 0x01));
+   *port_f |= 0x00; //shut off output port  
+   *port_b |= 0x00;
+  }
+  if(*pin_k & 0x01) {
+    Serial.println("System Enable");
+    *port_f |= 0xFF; //turn on outputs 
+    *port_k |= 0xF8;
+    *port_b |=0xFF;
+
+    //temp/hum. sensor stuff, also prints to lcd
+    test = DHT11.read(DHT11PIN);
+    lcd.setCursor(0,0);
+    lcd.print("HUM: ");
+    lcd.print((float)DHT11.humidity, 2);
+    lcd.setCursor(0,1); 
+    lcd.print("TEMP: ");
+    lcd.print((float)DHT11.temperature, 2);
+    if(DHT11.temperature > 21){
+      *port_b |= 0x80; //turn on fan motor
+      *port_f |= 0b01000000; //turn on blue led
+    }
+    delay(100);
+
+    //servo stuff
+    adc_reading = adc_read(potpin);
+    adc_reading = map(adc_reading , 0, 1023, 0, 180);     // scale it to use it with the servo (value between 0 and 180)
+    servo.write(adc_reading);   
+    Serial.println(adc_reading);// sets the servo position according to the scaled value
+    delay(20);
+    
+    while((*pin_k & 0x01));
+  }
+}
+
+void adc_init(){
+  *my_ADCSRA |= 0b10000000;
+  *my_ADCSRA &= 0b11011111;
+  *my_ADCSRA &= 0b11110111;
+  *my_ADCSRA &= 0b11110011;
+
+  *my_ADCSRB &= 0b11110111;
+  *my_ADCSRB &= 0b11111000;
+
+  *my_ADMUX &= 0b01111111;
+  *my_ADMUX |= 0b01000000;
+  *my_ADMUX &= 0b11011111;
+  *my_ADMUX &= 0b11011111;
+  *my_ADMUX &= 0b11100000;
+}
+
+unsigned int adc_read(unsigned char adc_channel){
+  *my_ADMUX &= 0xE0;
+  *my_ADCSRB &= 0xFF;
+
+  *my_ADMUX |= adc_channel;
+  
+  *my_ADCSRA |= 0x40;
+   while((*my_ADCSRA & 0x40) != 0);
+
+  return *my_ADC_DATA;
+}
+
+void U0init(unsigned long U0baud){
+  unsigned long FCPU = 16000000;
+  unsigned int tbaud;
+  tbaud = (FCPU / 16 / U0baud -1);
+  *myUCSR0A = 0x20;
+  *myUCSR0B = 0x18;
+  *myUCSR0C = 0x06;
+  *myUBRR0  = tbaud;
+}
