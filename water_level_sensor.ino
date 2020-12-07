@@ -12,6 +12,8 @@ volatile unsigned char *port_f = (unsigned char *) 0x31;
 volatile unsigned char *ddr_f = (unsigned char *) 0x30;
 volatile unsigned char *port_b = (unsigned char *) 0x25;
 volatile unsigned char *ddr_b = (unsigned char *) 0x24;
+volatile unsigned char *port_k = (unsigned char *) 0x108;
+volatile unsigned char *ddr_k = (unsigned char *) 0x107;
 
 volatile unsigned char *myADMUX = (unsigned char *) 0x7C;
 volatile unsigned char *myADCSRB = (unsigned char *) 0x7B;
@@ -28,29 +30,33 @@ int reading = 0;
 const int rs = 11, en = 10, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
-#define sensorPin 0
+#define sensorPin 1
 #define RDA 0x80
 
 ISR(TIMER1_COMPA_vect){
-  *port_b |= 0x80; //turn on adc0
+  *port_k |= 0x80; //turn on adc0
   delay(10);
-  reading = analogRead(0);
-  if(reading < 200){
+  reading = analogRead(1);
+  if(reading < 200){ //water threshold for error
     lcd.print("ERROR");
     *port_f |= 0b00010000; //turns on red led to indicate err
   }
-  *port_b &= 0x7F; //turn off adc0
+  if(reading > 200){
+    *port_f &= 0b11101111; //turns off red led
+    *port_f |= 0b00100000; //turns on green led
+  }
+  *port_k &= 0x7F; //turn off adc0
 }
 
 void setup() {
   //port setup, can change once implemented into proj
-  *ddr_f &= 0x00; //port f is all inputs
-  *ddr_b |= 0xFF; //port b is all outputs
-  *port_b &= 0x00; //all pins in port b are set low
+  *ddr_f &= 0xF0; //lower half of byte is inputs, upper is outputs
+  *ddr_k |= 0xFF; //port b is all outputs
+  *port_k &= 0x00; //all pins in port b are set low
   
   //uart and adc setup
   U0init(9600); //set up the uart
-  adc_init; //set up the adc
+  adc_init(); //set up the adc
 
   //timer setup here
   TCCR1A = 0; // clears TCCR1A register
@@ -78,7 +84,7 @@ void adc_init(){
   *myADCSRA |= 0b10000000;
   *myADCSRA &= 0b11011111;
   *myADCSRA &= 0b11110111;
-  *myADCSRA &= 0b11111000;
+  *myADCSRA &= 0b11110011;
 
   *myADCSRB &= 0b11110111;
   *myADCSRB &= 0b11111000;
