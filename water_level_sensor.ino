@@ -37,6 +37,7 @@ ISR(TIMER1_COMPA_vect){
   reading = analogRead(0);
   if(reading < 200){
     lcd.print("ERROR");
+    *port_f |= 0b00010000; //turns on red led to indicate err
   }
   *port_b &= 0x7F; //turn off adc0
 }
@@ -101,11 +102,6 @@ unsigned int adc_read(unsigned char adc_channel){
   return *myADC_DATA;
 }
 
-void U0putchar(unsigned char U0pdata){
-  while(!(*myUCSR0A & 0x60)){};
-  *myUDR0 = U0pdata;
-}
-
 void U0init(unsigned long U0baud){
   unsigned long FCPU = 16000000;
   unsigned int tbaud;
@@ -114,18 +110,4 @@ void U0init(unsigned long U0baud){
   *myUCSR0B = 0x18;
   *myUCSR0C = 0x06;
   *myUBRR0  = tbaud;
-}
-
-void print_int(int output){
-    U0putchar(output);
-}
-
-unsigned char U0kbhit()
-{
-  if((*myUCSR0A & RDA)){
-    return 1;
-  }
-  else{
-    return 0;
-  }
 }
