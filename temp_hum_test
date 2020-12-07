@@ -1,0 +1,46 @@
+#include <Arduino.h>
+#include <LiquidCrystal.h>
+#include <Wire.h>
+#include <dht11.h>
+
+volatile unsigned char *myUCSR0A = (unsigned char *) 0x00C0;
+volatile unsigned char *myUCSR0B = (unsigned char *) 0x00C1;
+volatile unsigned char *myUCSR0C = (unsigned char *) 0x00C2;
+volatile unsigned char *myUBRR0 = (unsigned char *) 0x00C4;
+
+#define DHT11PIN 6
+
+dht11 DHT11;
+
+const int rs = 11, en = 10, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+void setup() {
+  // put your setup code here, to run once:
+  lcd.begin(16,2);
+  U0init(9600);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  int test = DHT11.read(DHT11PIN);
+
+  lcd.setCursor(0,0);
+  lcd.print("HUM: ");
+  lcd.print((float)DHT11.humidity, 2);
+  lcd.setCursor(0,1); 
+  lcd.print("TEMP: ");
+  lcd.print((float)DHT11.temperature, 2);
+
+  delay(2000);
+}
+
+void U0init(unsigned long U0baud){
+  unsigned long FCPU = 16000000;
+  unsigned int tbaud;
+  tbaud = (FCPU / 16 / U0baud -1);
+  *myUCSR0A = 0x20;
+  *myUCSR0B = 0x18;
+  *myUCSR0C = 0x06;
+  *myUBRR0  = tbaud;
+}
