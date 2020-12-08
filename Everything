@@ -109,6 +109,7 @@ void loop() {
    Serial.println("System Disable"); //Set System to low state
    *port_f |= 0x00; //shut off output port  
    *port_b = 0x00;
+   *port_f |= 0b10000000; //turns on yellow led
    while(!(*pin_k & 0x01));
    *port_f |= 0x00; //shut off output port  
    *port_b |= 0x00;
